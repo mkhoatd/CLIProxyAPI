@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/auth/codex"
 	internalconfig "github.com/router-for-me/CLIProxyAPI/v6/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/logging"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/registry"
@@ -1928,6 +1930,16 @@ func (m *Manager) refreshAuthWithLimit(ctx context.Context, id string) {
 	m.refreshAuth(ctx, id)
 }
 
+func (m *Manager) deleteAuth(ctx context.Context, id string) error {
+	if m.store == nil {
+		return fmt.Errorf("auth store is not set")
+	}
+	if err := m.store.Delete(ctx, id); err != nil {
+		return fmt.Errorf("failed to delete auth: %w", err)
+	}
+	return nil
+}
+
 func (m *Manager) snapshotAuths() []*Auth {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -2176,6 +2188,14 @@ func (m *Manager) refreshAuth(ctx context.Context, id string) {
 	updated, err := exec.Refresh(ctx, cloned)
 	if err != nil && errors.Is(err, context.Canceled) {
 		log.Debugf("refresh canceled for %s, %s", auth.Provider, auth.ID)
+		return
+	}
+	if errors.Is(err, codex.ErrNonRetryableRefresh) {
+		m.deleteAuth(ctx, id)
+		m.mu.Lock()
+		delete(m.auths, id)
+		m.mu.Unlock()
+		log.Warnf("delete auth %s due to non-retryable refresh error: %v", id, err)
 		return
 	}
 	log.Debugf("refreshed %s, %s, %v", auth.Provider, auth.ID, err)
