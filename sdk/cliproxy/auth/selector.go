@@ -15,6 +15,7 @@ import (
 
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/thinking"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
+	"github.com/tidwall/gjson"
 )
 
 // RoundRobinSelector provides a simple provider scoped round-robin selection strategy.
@@ -263,7 +264,8 @@ func getAvailableAuths(auths []*Auth, provider, model string, now time.Time) ([]
 // For gemini-cli virtual auths (identified by the gemini_virtual_parent attribute),
 // a two-level round-robin is used: first cycling across credential groups (parent
 // accounts), then cycling within each group's project auths.
-func (s *RoundRobinSelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*Auth) (*Auth, error) {
+func (s *RoundRobinSelector) Pick(ctx context.Context, provider, model string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, auths []*Auth) (*Auth, error) {
+	_ = req
 	_ = opts
 	now := time.Now()
 	available, err := getAvailableAuths(auths, provider, model, now)
@@ -362,7 +364,7 @@ func groupByVirtualParent(auths []*Auth) (map[string][]*Auth, []string) {
 }
 
 // Pick selects the first available auth for the provider in a deterministic manner.
-func (s *FillFirstSelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*Auth) (*Auth, error) {
+func (s *FillFirstSelector) Pick(ctx context.Context, provider, model string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, auths []*Auth) (*Auth, error) {
 	_ = opts
 	now := time.Now()
 	available, err := getAvailableAuths(auths, provider, model, now)
@@ -377,7 +379,7 @@ const sessionKeyMetadataKey = cliproxyexecutor.SessionKeyMetadataKey
 
 // Pick routes requests with the same session key to the same auth credential.
 // When no session key is present, it falls back to fill-first selection.
-func (s *StickyRoundRobinSelector) Pick(ctx context.Context, provider, model string, opts cliproxyexecutor.Options, auths []*Auth) (*Auth, error) {
+func (s *StickyRoundRobinSelector) Pick(ctx context.Context, provider, model string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, auths []*Auth) (*Auth, error) {
 	now := time.Now()
 	available, err := getAvailableAuths(auths, provider, model, now)
 	if err != nil {
@@ -390,6 +392,12 @@ func (s *StickyRoundRobinSelector) Pick(ctx context.Context, provider, model str
 	if opts.Metadata != nil {
 		if raw, ok := opts.Metadata[sessionKeyMetadataKey].(string); ok {
 			sessionKey = strings.TrimSpace(raw)
+		}
+	}
+
+	if sessionKey == "" && len(req.Payload) > 0 {
+		if key := strings.TrimSpace(gjson.GetBytes(req.Payload, "prompt_cache_key").String()); key != "" {
+			sessionKey = key
 		}
 	}
 
