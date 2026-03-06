@@ -7,7 +7,6 @@ package codex
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -260,9 +259,6 @@ func (o *CodexAuth) CreateTokenStorage(bundle *CodexAuthBundle) *CodexTokenStora
 // RefreshTokensWithRetry refreshes tokens with a built-in retry mechanism.
 // It attempts to refresh the tokens up to a specified maximum number of retries,
 // with an exponential backoff strategy to handle transient network errors.
-
-var ErrNonRetryableRefresh = errors.New("non-retryable")
-
 func (o *CodexAuth) RefreshTokensWithRetry(ctx context.Context, refreshToken string, maxRetries int) (*CodexTokenData, error) {
 	var lastErr error
 
@@ -282,7 +278,7 @@ func (o *CodexAuth) RefreshTokensWithRetry(ctx context.Context, refreshToken str
 		}
 		if isNonRetryableRefreshErr(err) {
 			log.Warnf("Token refresh attempt %d failed with non-retryable error: %v", attempt+1, err)
-			return nil, ErrNonRetryableRefresh
+			return nil, err
 		}
 
 		lastErr = err
@@ -297,7 +293,7 @@ func isNonRetryableRefreshErr(err error) bool {
 		return false
 	}
 	raw := strings.ToLower(err.Error())
-	return strings.Contains(raw, "refresh_token_reused") || strings.Contains(raw, "token_expired")
+	return strings.Contains(raw, "refresh_token_reused")
 }
 
 // UpdateTokenStorage updates an existing CodexTokenStorage with new token data.
