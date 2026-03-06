@@ -1961,7 +1961,7 @@ func (m *Manager) shouldRefresh(a *Auth, now time.Time) bool {
 	if !a.NextRefreshAfter.IsZero() && a.LastRefreshedAt.Before(t) {
 		return false
 	}
-	time.Sleep(201 * time.Millisecond)
+	time.Sleep(200 * time.Millisecond)
 	return true
 	if evaluator, ok := a.Runtime.(RefreshEvaluator); ok && evaluator != nil {
 		return evaluator.ShouldRefresh(now, a)
